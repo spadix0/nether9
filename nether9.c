@@ -81,15 +81,14 @@ ascii_hash (const char *str)
 
 
 /* SurfaceRules.VerticalGradientConditionSource.f_189829_ */
-const int ceiling_top = 127;
+#define ceiling_top 127
 /* SurfaceRules.VerticalGradientConditionSource.f_189830_ */
-const int ceiling_bottom = 127 - 5;
+#define ceiling_bottom (127 - 5)
 
 // Mth.m_144914_((double)y, (double)true_at_and_below, (double)false_at_and_above, 1.0D, 0.0D)
-const double ceiling_height = ceiling_top - ceiling_bottom;
-const double gradient[ceiling_top - ceiling_bottom + 1] = {
-#define GRAD(y) \
-    [y - ceiling_bottom] = 1 - (y - ceiling_bottom) / ceiling_height
+#define ceiling_height (double)(ceiling_top - ceiling_bottom)
+static const double gradient[] = {
+#define GRAD(_y) (1 - (_y - ceiling_bottom) / ceiling_height)
     GRAD(122), GRAD(123), GRAD(124), GRAD(125), GRAD(126), GRAD(127),
 #undef GRAD
 };
