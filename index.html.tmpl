@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>nether9: Search Nether ceiling for Wither kill spots</title>
+    <meta name="description" content="A small web app to search the Nether ceiling for bedrock patterns." />
+    <meta property="og:title" content="nether9: Search Nether ceiling for Wither kill spots" />
+    <meta property="og:description" content="A small web app to search the Nether ceiling for bedrock patterns." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://spadix0.github.io/nether9" />
+    <meta property="og:image" content="https://repository-images.githubusercontent.com/778403487/0d2743e5-8b58-4726-8eb9-addd6e7b3c95" />
+    <meta property="og:image:alt" content="nether9: Search Nether ceiling for Wither kill spots" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+html { background: linear-gradient(#311, black) top/auto 800px no-repeat, black  }
+body { width: 100vw; max-width: 800px; margin: auto; color: #fff }
+body, .opener { font: 16px/1.5 sans-serif }
+main { margin: 1em }
+body > header img { width: 100%; height: auto }
+img { image-rendering: pixelated }
+table, td { border: none }
+th { border: none; text-align: start }
+:any-link, button.opener { color: #f7f }
+:any-link:hover, .opener:hover { color: #f45}
+
+form { margin: auto }
+form button { display: block; margin: 1em auto 1em 0px; }
+input[inputmode="numeric"] { text-align: right }
+table.pattern { border-collapse: collapse }
+table.pattern td { border-top: thin solid #ccb; border-bottom: thin solid #ccb; padding: .5em 0px }
+table.legend tbody td:nth-of-type(1) { text-align: center; padding: 0px 1em }
+table.legend tfoot td { text-align: start }
+.layer canvas { margin: 0px 24px }
+.indented { margin-left:.5em; border-left:thin solid #888; padding-left:2em }
+.opener { width: 100%; padding: 0px; text-align: start; cursor: pointer }
+.opener .pattern { cursor: auto }
+button.opener { appearance: none; border: none; background: none }
+.opener:before { content: "▶ " }
+.opener.active:before { content: "▼ " }
+#progress { border:thin solid #fff }
+#progress .bar { margin: 0px auto 0px 0px; background: #dd2; height: 1em }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <a href="https://github.com/spadix0/nether9"><img alt="nether9: " width="640" height="320" src="https://repository-images.githubusercontent.com/778403487/0d2743e5-8b58-4726-8eb9-addd6e7b3c95"/></a>
+    </header>
+    <main>
+      <p>Search for specific patterns of bedrock in the ceiling of the Nether
+        for, eg, making a Wither killer.  Just enter your world seed and an
+        optional start location, then hit "Search".
+        Check <a href="https://github.com/spadix0/nether9">the README</a> for
+        more details.</p>
+      <form id="form">
+        <p><label>World seed:
+            <input name="seed" type="text" inputmode="numeric" required="true" pattern="-?[0-9]{1,19}" placeholder="number from /seed" size="20" />
+        </label></p>
+        <p><label>Start location: <span style="white-space:nowrap">
+          <label>x=<input name="startx" type="text" inputmode="numeric"
+                          require="true" pattern="-?[0-9]+" size="10" value="0"/></label>
+          <label>z=<input name="startz" type="text" inputmode="numeric"
+                          require="true" pattern="-?[0-9]+" size="10" value="0"/></label>
+        </span></label></p>
+        <button type="button" class="opener">Advanced options…</button>
+        <div class="indented" style="display:none">
+          <p><label>Stop after finding
+            <input name="min_matches" type="text" inputmode="numeric"
+                   require="true" pattern="[0-9]+" size="5" value="4"/>
+            matching locations.</label></p>
+          <p><label>Stop after searching out
+            <input id="max_radius" name="max_radius" type="text" inputmode="numeric"
+                   require="true" pattern="[0-9]+" size="6" value="1024"/>
+            blocks from the start.</label></p>
+          <p>P<sub>success</sub> ≈ <span id="Psuccess">?</span></p>
+          <p>Search pattern — click to cycle states:</p>
+          <div id="pattern" class="stats"></div>
+          <table class="legend">
+            <thead>
+              <tr><th colspan="2">legend:</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><img class="bedrock" /></td><td>require bedrock</td></tr>
+              <tr><td><img class="netherrack" /></td><td>require <em>not</em> bedrock</td></tr>
+              <tr><td><div style="width:16px; height:16px; margin: auto; text-align:center; font-size:12px; background:#311; color:#888">?</div></td><td>no requirement, match anything</td></tr>
+            </tbody>
+          </table>
+          <p>NB: the pattern is <em>oriented</em>.  Rotated or mirrored
+            variations of an asymmetric pattern will <em>not</em> match (use
+            multiple searches).</p>
+        </div>
+        <p id="noscript" style="color:#ff3">javascript must be enabled to use this tool</p>
+      </form>
+      <div id="progress" style="display:none">
+        <div class="bar" style="width:0%"></div>
+      </div>
+      <div id="results" style="display:none"><p></p></div>
+    </main>
+
+    <div style="display:none">
+      <img id="netherrack" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAAFVBMVEWFQkJyMjJlKChXISFQGxtRFRVBFhZSHStNAAAAeklEQVQIHQXBwRGDMAwEwIMKLAEFnC0XAJPhbwXzhxD+Ydx/DdnF5zKJDxOWtPt4xwrV9UrViI42czgdQT30UhKOdEAsKs7xR63sMNyuX3XAaDVKJjxoI6cLM7UF2Rus2F1ye+HUkreDGTPDtC1hgkv/3smIjSNXl/gHQJ0WFS0xdI8AAAAASUVORK5CYII=" />
+      <img id="bedrock" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAAAAAA6mKC9AAAAcElEQVR42jWPMQ0DQBSFvpazgBgEPFHYbdKmCwth4AZgM0E8ttai9pDjwQNCzZ1tPlMAvEcAwmrjUFF4X3A190e8U/EnkXkrQVeruq8TmUC7LVY8qsE9FVy51TuBCQsAby2fwMPVbcI/An9zNdwD9wFD0lUf95ycGwAAAABJRU5ErkJggg==" />
+    </div>
+  </body>
+
+  <template id="patterntable">
+    <table class="pattern">
+      <tbody>
+        <tr class="layer"><td><canvas /></td></tr>
+        <tr class="layer"><td><canvas /></td></tr>
+        <tr class="layer"><td><canvas /></td></tr>
+        <tr class="layer"><td><canvas /></td></tr>
+      </tbody>
+    </table>
+  </template>
+
+  <script type="text/js-worker">
+onmessage = (ev) => {
+    const { module, form, pattern } = ev.data;
+    const seed = BigInt(form.seed);
+    const min_matches = parseInt(form.min_matches);
+    const max_radius = parseInt(form.max_radius);
+
+    let nfound = 0;
+    const inst = new WebAssembly.Instance(module, { env: {
+        onsearch: r => {
+            const done = r > max_radius || nfound >= min_matches;
+            postMessage({ radius: r, progress: done || r/max_radius });
+            return done;
+        },
+        onresult: (x, z) => {
+            nfound++;
+            postMessage({ result: { seed, x, z }});
+            return 0;
+        },
+    }});
+
+    const exp = inst.exports;
+    const mem = new Uint8Array(exp.memory.buffer);
+    mem.set(pattern, exp.pattern.value);
+    exp.search_ceiling(seed, parseInt(form.startx), parseInt(form.startz));
+};
+  </script>
+
+  <script>
+"use strict";
+const { ceil } = Math;
+const nlayers = 4, stride = 8, dimask = nlayers * stride;
+const statesz = 2 * dimask;
+
+function reporterror(ev) {
+    document.querySelector("#noscript").replaceChildren(
+        "An error occurred – possibly your browser is not supported:",
+        ev.message
+    );
+}
+addEventListener("error", reporterror);
+
+const bedrock = document.querySelector("#bedrock");
+const netherrack = document.querySelector("#netherrack");
+
+for(const img of document.querySelectorAll("img.bedrock"))
+    img.src = bedrock.src;
+for(const img of document.querySelectorAll("img.netherrack"))
+    img.src = netherrack.src;
+
+const tofixed = s => s.toFixed(6)
+    .replace(/[.]?0*$/, "")
+    .replace(/^(?:0(?!$))*/, "");
+
+
+for(const btn of document.querySelectorAll("button.opener"))
+    btn.addEventListener("click", () => {
+        const act = btn.classList.toggle("active");
+        btn.nextElementSibling.style.display = (act) ? "block" : "none";
+    });
+
+
+function updatestats() {
+    let pmatch = 1;
+    for(const c of pattern.querySelectorAll("canvas"))
+        pmatch *= c.pmatch;
+    const r = parseInt(document.querySelector("#max_radius").value);
+    const n = (2*(r + 60))**2;
+    const ps = 1 - 2**(n*Math.log2(1 - pmatch));
+    document.querySelector("#Psuccess").replaceChildren(`${tofixed(ps)}`);
+}
+document.querySelector("#max_radius")
+    .addEventListener("input", updatestats);
+
+
+const pattern = initpattern(
+    document.querySelector("#pattern"), 5, "xz", new Uint8Array(2*4*8)
+);
+addEventListener("load", pattern.redraw);
+addEventListener("load", updatestats);
+
+for(const canvas of pattern.querySelectorAll("canvas")) {
+    canvas.addEventListener("mousemove", canvas.hilite);
+    canvas.addEventListener("mouseleave", canvas.redraw);
+    canvas.addEventListener("click", (ev) => {
+        const pos = canvas.tilepos(ev.offsetX, ev.offsetY);
+        if(pos) {
+            const state = pattern.state;
+            const i = (3 - canvas.layer)*stride + pos[1]+2;
+            const bit = 1 << 5-pos[0];
+            const blks = state[i], mask = state[i+dimask];
+            state[i] = blks&~bit | mask&bit;
+            state[i+dimask] = mask ^ (mask|~blks)&bit;
+            canvas.hilite(ev);
+            updatestats();
+        }
+    });
+}
+
+const results = document.querySelector("#results");
+const progbar = document.querySelector("#progress .bar");
+const searchercode = new Blob([
+    document.querySelector("script[type='text\/js-worker']").textContent
+], { type: "text/javascript" });
+let searcher = null, searchrad = 0;
+let searchmod = null, localizer = null, copydata = null;
+
+addEventListener("load", () => {
+    const src = fetch(document.querySelector("#wasm-src").textContent)
+        .then(inp => new Response(
+            inp.body.pipeThrough(new DecompressionStream("gzip")), {
+                headers: { "Content-Type": "application/wasm" },
+            })
+        );
+
+    WebAssembly.instantiateStreaming(src, { env: {
+        onsearch: () => 1,
+        onresult: () => 1,
+    }})
+        .then(obj => {
+            searchmod = obj.module;
+            localizer = obj.instance;
+            const exp = localizer.exports;
+            const i = exp.default_pattern.value;
+            const dflt = exp.memory.buffer.slice(i, i+statesz);
+            pattern.state.set(new Uint8Array(dflt));
+            pattern.redraw();
+            updatestats();
+        });
+});
+
+function localize_result(result) {
+    const exp = localizer.exports;
+    exp.gen_ceiling_around(result.seed, result.x, result.z);
+    return new Uint8Array(exp.memory.buffer, exp.pattern.value, statesz);
+}
+
+function updateresults() {
+    const n = results.childElementCount - 1;
+    const done = progbar.style.width.startsWith("100");
+    const stat = results.firstElementChild;
+    stat.replaceChildren(
+        `Found ${n} matching locations within ${searchrad} blocks${(done)?":":"..."}`,
+        ...stat.querySelectorAll("br,button")
+    );
+    if(done)
+        document.querySelector("#progress").style.display = "none";
+    if(n && !stat.childElementCount) {
+        const copy = document.createElement("button");
+        copy.replaceChildren("Copy to Clipboard");
+        copy.addEventListener("click", () => {
+            navigator.clipboard.writeText(copydata.join("\n")+"\n")
+                .catch(console.error);
+        });
+        stat.append(document.createElement("br"), copy);
+    }
+}
+
+function addresult(result) {
+    const item = results.appendChild(document.createElement("div"));
+    item.classList.add("opener");
+    item.replaceChildren(`(${result.x},, ${result.z})`);
+    copydata.push(`${result.x} ${result.z}`);
+    item.addEventListener("click", () => {
+        if(item.classList.toggle("active")) {
+            const pat = item.appendChild(initpattern(
+                document.createElement("div"),
+                7, [ `x=${result.x}`, `z=${result.z}` ],
+                localize_result(result)
+            ));
+            pat.classList.add("result", "indented");
+            pat.redraw();
+        } else
+            item.replaceChildren(item.firstChild);
+    });
+}
+
+
+document.querySelector("#form")
+    .addEventListener("submit", ev => {
+        ev.preventDefault();
+        const form = Object.fromEntries(new FormData(ev.target).entries());
+
+        if(searcher)
+            searcher.terminate();
+        results.replaceChildren(results.firstElementChild);
+        document.querySelector("#progress").style.display =
+            results.style.display = "block";
+        progbar.style.width = "0%";
+        searchrad = 0;
+        copydata = [];
+        updateresults();
+
+        searcher = new Worker(URL.createObjectURL(searchercode));
+        searcher.onmessage = (ev) => {
+            const data = ev.data, prog = data.progress;
+            if(prog !== undefined) {
+                progbar.style.width = `${prog*100}%`;
+                searchrad = data.radius;
+            } else
+                addresult(data.result);
+            updateresults();
+        };
+        searcher.onerror = (ev) => {
+            throw new Error("worker fail");
+        };
+        searcher.postMessage({
+            module: searchmod,
+            form: form,
+            pattern: pattern.state,
+        });
+    });
+
+
+function initpattern(pat, size, pos, state) {
+    pat.classList.add("pattern");
+    const tmpl = document.querySelector("#patterntable");
+    pat.replaceChildren(tmpl.content.cloneNode(true));
+    pat.state = state;
+
+    const px = Math.max(window.devicePixelRatio, 1);
+    const tilepx = Math.round(32*px*.5)*2;
+
+    const sq = (tilepx + 1)*size + 1;
+    const b = ceil(12/2*px)*2, lh = ceil(1.25*b), th = ceil(2*px);
+    const h = ceil(lh + b + sq + lh + b/2), w = ceil(8/7/8*h)*8;
+    const x0 = w - (sq + lh), y0 = h - (sq + lh + b/2);
+    const cx = x0 + sq/2, cy = y0 + sq/2;
+
+    for(const [l, tr] of pat.querySelectorAll("tr.layer").entries()) {
+        const canvas = tr.querySelector("canvas");
+        canvas.layer = l;
+        canvas.width = w;
+        canvas.height = h;
+        canvas.style.width = `${w/px}px`;
+        canvas.style.height = `${h/px}px`;
+
+        canvas.redraw = (function () {
+            const c = canvas.getContext("2d");
+            c.reset();
+            c.imageSmoothingEnabled = false;
+            c.font = `${tilepx/2}px sans-serif`;
+
+            c.clearRect(0, 0, w, h);
+
+            c.fillStyle = "#311";
+            c.shadowColor = "#822";
+            c.shadowBlur = 24*px;
+            c.fillRect(x0, y0, sq, sq);
+
+            c.shadowColor = "#0000";
+            c.shadowBlur = 0;
+            c.fillStyle = "#888";
+            c.textAlign = "center";
+            c.textBaseline = "middle";
+            const count = [ 0, 0 ];
+            for(let z = 0; z < size; z++) {
+                const i = (3-l)*stride + z+4-(size>>1);
+                const blks = state[i], mask = state[i+dimask];
+                for(let x = 0; x < size; x++) {
+                    const bit = 1 << 3+(size>>1)-x;
+                    const sx = x0 + 1 + (tilepx + 1)*x;
+                    const sy = y0 + 1 + (tilepx + 1)*z;
+                    if(mask & bit)
+                        c.fillText("?", sx + tilepx/2, sy + tilepx/2);
+                    else {
+                        count[+((blks & bit) != 0)]++;
+                        c.drawImage(
+                            (blks & bit) ? bedrock : netherrack,
+                            sx, sy, tilepx, tilepx
+                        );
+                    }
+                }
+            }
+
+            c.beginPath();
+            c.strokeStyle = "#9bf";
+            for(let i = 0; i <= size; i++) {
+                const u = (tilepx + 1)*i + .5;
+                c.moveTo(x0, y0 + u);
+                c.lineTo(x0 + sq, y0 + u);
+                c.moveTo(x0 + u, y0);
+                c.lineTo(x0 + u, y0 + sq);
+            }
+            c.stroke();
+
+            const bs = Math.round(b/3);
+            c.beginPath();
+            c.strokeStyle = "#fff";
+            c.moveTo(cx+.5, y0-b);
+            c.lineTo(cx+.5, y0-bs);
+            c.moveTo(cx+.5, y0+sq+bs);
+            c.lineTo(cx+.5, h-2*bs);
+            c.moveTo(x0-b, cy+.5);
+            c.lineTo(x0-bs, cy+.5);
+            c.moveTo(x0+sq+bs, cy+.5);
+            c.lineTo(w-bs, cy+.5);
+            c.moveTo(cx+.5, cy-bs);
+            c.lineTo(cx+.5, cy+bs+1);
+            c.moveTo(cx-bs, cy+.5);
+            c.lineTo(cx+bs+1, cy+.5);
+            c.stroke();
+
+            c.fillStyle = "#fff";
+            c.beginPath();
+            c.moveTo(cx+.5, h-1-.5*b);
+            c.lineTo(cx+.5+.75*bs, h-b);
+            c.lineTo(cx+.5-.75*bs, h-b);
+            c.closePath();
+            c.moveTo(w-1, cy+.5);
+            c.lineTo(w-.5*b, cy+.5+.75*bs);
+            c.lineTo(w-.5*b, cy+.5-.75*bs);
+            c.closePath();
+            c.fill();
+
+            c.font = `${b}px sans-serif`;
+            c.fontStretch = "semi-condensed";
+
+            c.textAlign = "end";
+            c.textBaseline = "middle";
+            c.fillText(pos[1], x0-lh, cy);
+            c.textAlign = "start";
+            c.textBaseline = "bottom";
+            c.fillText(`y=${126-l}`, 0, lh);
+            c.textAlign = "center";
+            c.fillText(pos[0], cx, lh);
+
+            if(pat.classList.contains("stats")) {
+                const pbed = .2*(4 - l);
+                const pmatch = canvas.pmatch = (1 - pbed)**count[0] * pbed**count[1];
+                c.textAlign = "start";
+                c.fillText("P", 0, h-lh);
+                const dxp = c.measureText("P").width;
+                c.drawImage(bedrock, dxp+2, h-lh-16);
+                c.fillText(`=${tofixed(pbed)}`, dxp+16+4, h-lh);
+                c.fillText("P", 0, h);
+                c.font = `${b*.75}px sans-serif`;
+                c.fillText("match", dxp, h);
+                const dxm = c.measureText("match").width;
+                c.font = `${b}px sans-serif`;
+                c.fillText(`=${tofixed(pmatch)}`, dxp+dxm, h);
+            }
+        });
+
+        canvas.tilepos = (cx, cy) => {
+            const x = Math.floor((cx*px - x0) / (tilepx + 1));
+            const y = Math.floor((cy*px - y0) / (tilepx + 1));
+            if(0 <= x && x < size && 0 <= y && y < size)
+                return [ x, y ];
+        };
+
+        canvas.hilite = function (ev) {
+            canvas.redraw();
+            const pos = canvas.tilepos(ev.offsetX, ev.offsetY);
+            if(!pos) return;
+
+            const c = canvas.getContext("2d");
+            c.save();
+            c.beginPath();
+            c.rect(0, 0, w, h);
+            const ulx = x0+1 + (tilepx + 1)*pos[0];
+            const uly = y0+1 + (tilepx + 1)*pos[1];
+            c.moveTo(ulx+tilepx, uly);
+            c.lineTo(ulx, uly);
+            c.lineTo(ulx, uly+tilepx);
+            c.lineTo(ulx+tilepx, uly+tilepx);
+            //c.rect(ulx+tilepx, uly, -tilepx, tilepx);  // breaks in Safari
+            c.clip();
+
+            c.fillStyle = "#ff4";
+            c.shadowColor = "#ff4";
+            c.shadowBlur = 14*px;
+            c.fillRect(ulx-th, uly-th, tilepx + 2*th, tilepx + 2*th);
+            c.restore();
+        };
+    }
+
+    pat.redraw = () => {
+        for(const c of pat.querySelectorAll("canvas"))
+            c.redraw();
+    };
+
+    return pat;
+}
+
+const btn = document.createElement("button");
+btn.replaceChildren("Search");
+document.querySelector("#noscript").replaceWith(btn);
+removeEventListener("error", reporterror);
+  </script>
+
+  <!-- generated from nether9.c (see Makefile) -->
+  <script id="wasm-src" type="text/uri-list">data:application/gzip;base64,N9WASM</script>
+</html>
+
+<!--
+MIT No Attribution
+
+Copyright 2024 Jeff Brown <spadix@users.sourceforge.net>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
